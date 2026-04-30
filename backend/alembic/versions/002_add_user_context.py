@@ -6,7 +6,6 @@ Create Date: 2026-04-30
 
 """
 from typing import Sequence, Union
-import sqlalchemy as sa
 from alembic import op
 
 revision: str = "002"
@@ -16,8 +15,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column("users", sa.Column("context", sa.Text(), nullable=True))
+    op.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS context TEXT")
 
 
 def downgrade() -> None:
-    op.drop_column("users", "context")
+    op.execute("ALTER TABLE users DROP COLUMN IF EXISTS context")
