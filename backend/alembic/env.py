@@ -21,7 +21,8 @@ target_metadata = Base.metadata
 
 # La URL viene del .env via settings, no de alembic.ini
 _db_url = settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
-config.set_main_option("sqlalchemy.url", _db_url)
+# configparser usa % para interpolación; hay que escapar los % del URL-encoded password
+config.set_main_option("sqlalchemy.url", _db_url.replace("%", "%%"))
 
 
 def run_migrations_offline() -> None:
