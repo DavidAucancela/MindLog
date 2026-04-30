@@ -4,7 +4,7 @@ import sys
 from logging.config import fileConfig
 
 from sqlalchemy import pool
-from sqlalchemy.ext.asyncio import async_engine_from_config
+from sqlalchemy.ext.asyncio import async_engine_from_config, create_async_engine
 from alembic import context
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -19,9 +19,13 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
-# La URL viene del .env via settings, no de alembic.ini
-_db_url = settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
-# configparser usa % para interpolación; hay que escapar los % del URL-encoded password
+# Normaliza prefijo para asyncpg (igual que database.py)
+_db_url = settings.DATABASE_URL
+if _db_url.startswith("postgresql://"):
+    _db_url = _db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+elif _db_url.startswith("postgres://"):
+    _db_url = _db_url.replace("postgres://", "postgresql+asyncpg://", 1)
+# configparser usa % para interpolación; escapar % del URL-encoded password
 config.set_main_option("sqlalchemy.url", _db_url.replace("%", "%%"))
 
 
@@ -44,10 +48,11 @@ def do_run_migrations(connection):
 
 
 async def run_async_migrations() -> None:
-    connectable = async_engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
+    # Usamos create_async_engine directo para evitar configparser y pasar SSL explícito
+    connectable = create_async_engine(
+        _db_url,
         poolclass=pool.NullPool,
+        connect_args={"ssl": "require"},
     )
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)

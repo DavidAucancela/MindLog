@@ -9,7 +9,7 @@ if _url.startswith("postgresql://"):
 elif _url.startswith("postgres://"):
     _url = _url.replace("postgres://", "postgresql+asyncpg://", 1)
 
-engine = create_async_engine(_url, echo=False)
+engine = create_async_engine(_url, echo=False, connect_args={"ssl": "require"})
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 
