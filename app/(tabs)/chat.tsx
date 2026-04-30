@@ -8,6 +8,7 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { useAuthStore } from '@/store/authStore';
 import { useChatStore, type ChatMessage } from '@/store/chatStore';
@@ -71,14 +72,20 @@ function ChatBubble({ message }: { message: ChatMessage }) {
 export default function ChatScreen() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [closing, setClosing] = useState(false);
   const { token } = useAuthStore();
-  const { messages, addMessage, startStreamingMessage, appendToStreamingMessage, finalizeStreamingMessage } = useChatStore();
+  const { messages, addMessage, startStreamingMessage, appendToStreamingMessage, finalizeStreamingMessage, clearMessages } = useChatStore();
   const listRef = useRef<FlatList>(null);
   const streamingIdRef = useRef<string | null>(null);
 
   function handleSend(text?: string) {
     const question = (text ?? input).trim();
     if (!question || loading) return;
+
+    // Capturamos el historial ANTES de agregar el nuevo mensaje
+    const history = messages
+      .filter(m => !m.streaming)
+      .map(m => ({ role: m.role, content: m.content }));
 
     addMessage({ role: 'user', content: question });
     setInput('');
@@ -135,7 +142,39 @@ export default function ChatScreen() {
       addMessage({ role: 'assistant', content: 'Hubo un error de conexión.' });
     };
 
-    xhr.send(JSON.stringify({ question }));
+    xhr.send(JSON.stringify({ question, history }));
+  }
+
+  function handleClose() {
+    const finishedMessages = messages.filter(m => !m.streaming);
+    if (finishedMessages.length === 0) return;
+
+    Alert.alert(
+      'Cerrar conversación',
+      'Se guardará un resumen de esta charla para que te recuerde mejor la próxima vez.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Cerrar y guardar',
+          onPress: async () => {
+            setClosing(true);
+            try {
+              const history = finishedMessages.map(m => ({ role: m.role, content: m.content }));
+              await fetch(`${API_URL}/chat/close`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
+                body: JSON.stringify({ history }),
+              });
+            } catch {}
+            setClosing(false);
+            clearMessages();
+          },
+        },
+      ]
+    );
   }
 
   return (
@@ -175,6 +214,17 @@ export default function ChatScreen() {
       )}
 
       <View style={styles.inputBar}>
+        {messages.length > 0 && (
+          <TouchableOpacity
+            style={styles.closeBtn}
+            onPress={handleClose}
+            disabled={loading || closing}
+          >
+            <Text style={styles.closeBtnText}>
+              {closing ? 'Guardando...' : 'Cerrar conversación'}
+            </Text>
+          </TouchableOpacity>
+        )}
         <View style={styles.inputWrap}>
           <TextInput
             style={styles.input}
@@ -254,6 +304,16 @@ const styles = StyleSheet.create({
     paddingBottom: Platform.OS === 'ios' ? 28 : 10,
     borderTopWidth: 0.5, borderTopColor: T.border,
     backgroundColor: T.bg,
+    gap: 8,
+  },
+  closeBtn: {
+    alignSelf: 'center',
+    paddingHorizontal: 16, paddingVertical: 6,
+    borderRadius: 14,
+    borderWidth: 0.5, borderColor: T.border,
+  },
+  closeBtnText: {
+    fontSize: 12, color: T.ink2,
   },
   inputWrap: {
     flexDirection: 'row', alignItems: 'flex-end', gap: 8,

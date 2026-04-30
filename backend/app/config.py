@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic_settings import BaseSettings
 
 
@@ -7,6 +8,7 @@ class Settings(BaseSettings):
     JWT_SECRET: str
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 43200  # 30 días
+    OPENAI_API_KEY: Optional[str] = None
 
     model_config = {"env_file": ".env"}
 

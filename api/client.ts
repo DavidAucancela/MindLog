@@ -65,6 +65,14 @@ export const api = {
     }).then(handleUnauthorized);
   },
 
+  patch: (path: string, body: unknown, token?: string | null) => {
+    return fetch(`${API_URL}${path}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+      body: JSON.stringify(body),
+    }).then(handleUnauthorized);
+  },
+
   delete: (path: string, token?: string | null) => {
     return fetch(`${API_URL}${path}`, {
       method: 'DELETE',

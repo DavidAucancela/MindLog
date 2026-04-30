@@ -26,6 +26,12 @@ const PROMPTS = [
   '¿Qué querés recordar de hoy?',
 ];
 
+function todayLabel() {
+  return new Date().toLocaleDateString('es-ES', {
+    weekday: 'long', day: 'numeric', month: 'long',
+  });
+}
+
 export default function NuevaEntradaScreen() {
   const [content, setContent] = useState('');
   const [mood, setMood] = useState<string | null>(null);
@@ -37,6 +43,21 @@ export default function NuevaEntradaScreen() {
   const placeholder = PROMPTS[new Date().getDay() % PROMPTS.length];
   const wordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
   const canSave = content.trim().length >= 10 && !saving;
+
+  function handleBack() {
+    if (content.trim().length > 0) {
+      Alert.alert(
+        'Descartar entrada',
+        'Si salís ahora, perderás lo que escribiste.',
+        [
+          { text: 'Seguir escribiendo', style: 'cancel' },
+          { text: 'Descartar', style: 'destructive', onPress: () => router.back() },
+        ]
+      );
+    } else {
+      router.back();
+    }
+  }
 
   async function handleSave() {
     if (!canSave) return;
@@ -67,14 +88,23 @@ export default function NuevaEntradaScreen() {
     >
       {/* Barra superior */}
       <View style={styles.topBar}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={handleBack}
+          accessibilityLabel="Volver"
+          accessibilityRole="button"
+        >
           <Text style={styles.backIcon}>‹</Text>
         </TouchableOpacity>
+
+        <Text style={styles.topDate}>{todayLabel()}</Text>
 
         <TouchableOpacity
           style={[styles.saveBtn, !canSave && styles.saveBtnDisabled]}
           onPress={handleSave}
           disabled={!canSave}
+          accessibilityLabel="Guardar entrada"
+          accessibilityRole="button"
         >
           {saving
             ? <ActivityIndicator color="#fff" size="small" />
@@ -90,7 +120,7 @@ export default function NuevaEntradaScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.scrollInner}
         keyboardShouldPersistTaps="handled"
-        onTouchEnd={() => inputRef.current?.focus()}
+        onStartShouldSetResponder={() => { inputRef.current?.focus(); return false; }}
       >
         <TextInput
           ref={inputRef}
@@ -102,13 +132,17 @@ export default function NuevaEntradaScreen() {
           multiline
           autoFocus
           textAlignVertical="top"
+          accessibilityLabel="Área de escritura"
+          accessibilityHint="Escribí tu entrada de diario"
         />
         {wordCount > 0 && (
-          <Text style={styles.wordCount}>{wordCount} palabras</Text>
+          <Text style={styles.wordCount} accessibilityLabel={`${wordCount} palabras`}>
+            {wordCount} {wordCount === 1 ? 'palabra' : 'palabras'}
+          </Text>
         )}
       </ScrollView>
 
-      {/* Selector de ánimo — siempre visible */}
+      {/* Selector de ánimo */}
       <View style={styles.moodBar}>
         <Text style={styles.moodLabel}>¿cómo te sentís?</Text>
         <ScrollView
@@ -126,6 +160,9 @@ export default function NuevaEntradaScreen() {
                   selected && { backgroundColor: opt.color + '22', borderColor: opt.color },
                 ]}
                 onPress={() => setMood(selected ? null : opt.key)}
+                accessibilityLabel={opt.label}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
               >
                 <View style={[styles.moodDot, { backgroundColor: opt.color }]} />
                 <Text style={[styles.moodChipText, selected && { color: opt.color, fontWeight: '600' }]}>
@@ -153,9 +190,14 @@ const styles = StyleSheet.create({
   },
   backBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   backIcon: { fontSize: 28, color: T.ink2, lineHeight: 34 },
+  topDate: {
+    fontSize: 12, color: T.ink3, letterSpacing: 0.3,
+    textTransform: 'lowercase', flex: 1, textAlign: 'center',
+  },
   saveBtn: {
     paddingHorizontal: 18, paddingVertical: 9,
     borderRadius: T.rBtn, backgroundColor: T.brown,
+    minWidth: 76, alignItems: 'center',
   },
   saveBtnDisabled: { backgroundColor: 'transparent', borderWidth: 0.5, borderColor: T.border },
   saveBtnText: { fontWeight: '600', fontSize: 14, color: '#fff' },
@@ -173,26 +215,18 @@ const styles = StyleSheet.create({
     minHeight: 200,
   },
   wordCount: {
-    marginTop: 16,
-    fontSize: 12,
-    color: T.ink3,
-    letterSpacing: 0.3,
+    marginTop: 16, fontSize: 12, color: T.ink3, letterSpacing: 0.3,
   },
 
   moodBar: {
     paddingTop: 12,
     paddingBottom: Platform.OS === 'ios' ? 32 : 16,
-    borderTopWidth: 0.5,
-    borderTopColor: T.border,
+    borderTopWidth: 0.5, borderTopColor: T.border,
     backgroundColor: T.bg,
   },
   moodLabel: {
-    fontSize: 11,
-    color: T.ink3,
-    letterSpacing: 0.6,
-    textTransform: 'lowercase',
-    paddingHorizontal: 20,
-    marginBottom: 10,
+    fontSize: 11, color: T.ink3, letterSpacing: 0.6,
+    textTransform: 'lowercase', paddingHorizontal: 20, marginBottom: 10,
   },
   moodRow: { paddingHorizontal: 16, gap: 8 },
   moodChip: {

@@ -1,50 +1,37 @@
 import anthropic
-from typing import List, AsyncIterator
+from typing import List, Dict, AsyncIterator, Optional
 from ..config import settings
 
 client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
 
-_CHAT_SYSTEM = (
-    "Sos un interlocutor cercano que leyó el diario del usuario. "
-    "Respondé directo, como en una conversación real: sin introducir frases como "
-    "'basándome en tus entradas' ni explicar de dónde viene lo que decís. "
-    "Sé breve y concreto — máximo 2-3 oraciones por respuesta. "
-    "Si no hay suficiente información para responder, decilo simple y preguntá algo. "
-    "Tono: cercano, honesto, sin sonar a terapeuta ni a chatbot. "
+_CHAT_SYSTEM_BASE = (
+    "Sos alguien que conoce bien al usuario porque leyó todo su diario. "
+    "Hablás de forma directa y cercana, como un amigo que recuerda lo que el otro le contó. "
+    "No menciones 'tus entradas' ni expliques de dónde sacás la información — simplemente hablá. "
+    "Respondé en 2-3 oraciones como máximo. Si la conversación lo pide, podés ser un poco más extenso. "
+    "Si algo no está claro en el diario, decilo y preguntá. "
+    "Nunca sonés a terapeuta, coach ni chatbot — sé humano. "
     "Respondé siempre en el idioma del usuario."
 )
 
 
-async def chat_with_entries(question: str, entries: List[str]) -> str:
-    entries_text = "\n\n".join(f"[Entrada {i + 1}]: {e}" for i, e in enumerate(entries))
+async def stream_chat_with_entries(
+    question: str,
+    entries: List[str],
+    history: Optional[List[Dict[str, str]]] = None,
+    user_context: Optional[str] = None,
+) -> AsyncIterator[str]:
+    entries_text = "\n\n".join(f"[{i + 1}]: {e}" for i, e in enumerate(entries))
+    context_block = f"\n\nLo que sé de esta persona:\n{user_context}" if user_context else ""
+    system = f"{_CHAT_SYSTEM_BASE}{context_block}\n\nDiario del usuario:\n{entries_text}"
 
-    message = await client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=1024,
-        system=_CHAT_SYSTEM,
-        messages=[
-            {
-                "role": "user",
-                "content": f"Mis entradas de diario:\n{entries_text}\n\nMi pregunta: {question}",
-            }
-        ],
-    )
-    return message.content[0].text
-
-
-async def stream_chat_with_entries(question: str, entries: List[str]) -> AsyncIterator[str]:
-    entries_text = "\n\n".join(f"[Entrada {i + 1}]: {e}" for i, e in enumerate(entries))
+    messages = list(history or []) + [{"role": "user", "content": question}]
 
     async with client.messages.stream(
         model="claude-sonnet-4-6",
         max_tokens=1024,
-        system=_CHAT_SYSTEM,
-        messages=[
-            {
-                "role": "user",
-                "content": f"Mis entradas de diario:\n{entries_text}\n\nMi pregunta: {question}",
-            }
-        ],
+        system=system,
+        messages=messages,
     ) as stream:
         async for text in stream.text_stream:
             yield text
@@ -91,3 +78,38 @@ async def detect_mood(content: str) -> str:
         ],
     )
     return message.content[0].text.strip().lower()
+
+
+async def update_user_context(
+    conversation: List[Dict[str, str]],
+    existing_context: Optional[str] = None,
+) -> str:
+    conversation_text = "\n".join(
+        f"{'Usuario' if m['role'] == 'user' else 'Asistente'}: {m['content']}"
+        for m in conversation
+    )
+    existing_block = f"\nContexto previo:\n{existing_context}\n" if existing_context else ""
+
+    message = await client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=400,
+        system=(
+            "Sos un sistema que mantiene un perfil conciso de una persona a partir de sus conversaciones de diario.\n"
+            "Tu tarea: actualizar el perfil con lo aprendido en la conversación nueva.\n"
+            "El perfil debe contener solo datos concretos: temas recurrentes, datos personales mencionados, "
+            "patrones emocionales, relaciones importantes, metas o preocupaciones.\n"
+            "Formato: viñetas cortas, sin interpretaciones ni juicios. Máximo 250 palabras.\n"
+            "Si no hay nada nuevo relevante, devolvé el perfil anterior sin cambios.\n"
+            "Respondé solo con el perfil actualizado, sin encabezados ni explicaciones."
+        ),
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    f"{existing_block}\nConversación nueva:\n{conversation_text}\n\n"
+                    "Actualizá el perfil."
+                ),
+            }
+        ],
+    )
+    return message.content[0].text.strip()

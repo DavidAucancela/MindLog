@@ -2,12 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel, EmailStr
+from typing import Optional
 from passlib.context import CryptContext
 from jose import jwt
 from datetime import datetime, timedelta, timezone
 from ..database import get_db
 from ..models.user import User
 from ..config import settings
+from ..dependencies import get_current_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -52,6 +54,24 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
     await db.flush()
 
     return {"data": {"token": _create_token(user.id), "user": _user_dict(user)}, "error": None}
+
+
+class UpdateProfileRequest(BaseModel):
+    name: Optional[str] = None
+
+
+@router.patch("/me")
+async def update_profile(
+    body: UpdateProfileRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if body.name is not None:
+        stripped = body.name.strip()
+        if not stripped:
+            raise HTTPException(status_code=400, detail="El nombre no puede estar vacío")
+        current_user.name = stripped
+    return {"data": _user_dict(current_user), "error": None}
 
 
 @router.post("/login")

@@ -19,6 +19,11 @@ class EntryCreate(BaseModel):
     mood: Optional[str] = None
 
 
+class EntryUpdate(BaseModel):
+    content: Optional[str] = None
+    mood: Optional[str] = None
+
+
 def _entry_dict(e: Entry) -> dict:
     return {
         "id": str(e.id),
@@ -82,6 +87,35 @@ async def create_entry(
     )
     db.add(entry)
     await db.flush()
+
+    return {"data": _entry_dict(entry), "error": None}
+
+
+@router.patch("/{entry_id}")
+async def update_entry(
+    entry_id: UUID,
+    body: EntryUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Entry).where(Entry.id == entry_id, Entry.user_id == current_user.id)
+    )
+    entry = result.scalar_one_or_none()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Entrada no encontrada")
+
+    if body.content is not None:
+        entry.content = body.content
+        entry.embedding = await generate_embedding(body.content)
+        if body.mood is None:
+            try:
+                entry.mood = await detect_mood(body.content)
+            except Exception:
+                pass
+
+    if body.mood is not None:
+        entry.mood = body.mood
 
     return {"data": _entry_dict(entry), "error": None}
 
