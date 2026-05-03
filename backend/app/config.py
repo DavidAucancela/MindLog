@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     JWT_EXPIRE_MINUTES: int = 43200  # 30 días
     OPENAI_API_KEY: Optional[str] = None
 
-    model_config = {"env_file": ".env"}
+    model_config = {"env_file": ".env", "extra": "ignore"}
 
 
 settings = Settings()
